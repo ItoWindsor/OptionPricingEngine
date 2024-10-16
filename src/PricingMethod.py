@@ -1,5 +1,6 @@
 from abc import ABC
 import numpy as np
+import numpy.typing as npt
 import matplotlib.pyplot as plt
 import scipy.stats as stats
 from src import Derivative, enums, UnderlyingModel
@@ -17,28 +18,55 @@ class PricingMethod(ABC):
 
 class PricingMonteCarlo(PricingMethod):
 
-    def __init__(self, n_time, n_mc):
+    def __init__(self, n_time: int, n_mc: int):
         self.n_time = n_time
         self.n_mc = n_mc
 
     def generate_paths(self, derivative: Derivative.Derivative, model: UnderlyingModel.UnderlyingModel) -> np.array:
+        """
+        This function should generate the paths for a monte-carlo simulation for a specific asset under a specific model where the model gives the dynamic of the price
+        e.g : for a black-scholes model, dSt/St = r dt + sigma * dW_t
+
+        Parameters
+        ----------
+        derivative : Derivative
+            instance of a derivative
+            e.g : An european Call of strike K, end_time 1, valuation_time : 0,
+
+        model : UnderlyingModel.UnderlyingModel
+            Instance of an underlying model
+            e.g : UnderlyingModel.BlackScholes
+
+        Returns
+        ----------
+        st : np.ndarray(np.float64)
+            matrix of the simulated paths
+        """
+
         match model:
             case UnderlyingModel.BlackScholes():
-                d = model.dic_param_model['n_underlying'] * self.n_mc
-                r = model.dic_param_model['r']
-                q = model.dic_param_model['q']
-                sigma = model.dic_param_model['sigma']
-                valuation_time = derivative.dic_params_derivatives['valuation_time']
-                end_time = derivative.dic_params_derivatives['end_time']
-                s = model.dic_param_model['underlying_price']
+                n_underlying: int = model.dic_param_model['n_underlying']
+                d: int = n_underlying * self.n_mc  # total mc paths for underlying
+
+                r: float = model.dic_param_model['r']  # float
+                q: np.ndarray = np.array(model.dic_param_model['q'])  # list of n_underlying elements
+                sigma: np.ndarray = model.dic_param_model['sigma']  # list of
+                valuation_time: float = derivative.dic_params_derivatives['valuation_time']
+                end_time: float = derivative.dic_params_derivatives['end_time']
+                s: np.ndarray = np.array(model.dic_param_model['underlying_price'])
 
                 t = np.linspace(valuation_time, end_time, self.n_time + 1)
                 h = (end_time - valuation_time) / self.n_time
-                w = np.insert(np.random.normal(scale=np.sqrt(h), size=(d, self.n_time)).cumsum(axis=1), 0, 0, axis=1)
 
-                if model.dic_param_model['n_underlying'] > 1:
+                w = self.generate_brownian_paths(h, d)
+                st = np.zeros(w.shape)
+                if n_underlying > 1:
                     w = self.generate_correlated_brownian(w, model.dic_param_model['rho'], model.dic_param_model['n_underlying'])
-                st = s * np.exp((r - q - 0.5 * (sigma ** 2)) * t + sigma * w)
+                    for k in range(self.n_mc):
+                        for j in range(self.n_time+1):
+                            st[k*n_underlying:(k+1)*n_underlying,j] = s*np.exp( ((r-q) - sigma**2)*t[j] + w[k*n_underlying:(k+1)*n_underlying,j] )
+                else:
+                    st = s * np.exp((r - q - 0.5 * (sigma ** 2)) * t + sigma * w)
 
                 return st
 
@@ -48,20 +76,48 @@ class PricingMonteCarlo(PricingMethod):
     def compute_price(self, derivative: Derivative.Derivative, model: UnderlyingModel.UnderlyingModel):
         pass
 
-    def generate_correlated_brownian(self, paths: np.ndarray, rho: Union[float, np.ndarray], n_underlying: int) -> np.ndarray:
-        correlated_paths = np.zeros(paths.shape)
-        if n_underlying == 2:
-            rank1 = int(paths.shape[0] / 2)
-            for k in range(self.n_mc):
-                correlated_paths[k*self.n_mc:(k+1)*self.n_mc, :] = np.sqrt(rho) * paths[:rank1, :] + np.sqrt(1 - rho) * paths[rank1:, :]
-            return correlated_paths
+    def generate_brownian_paths(
+            self,
+            h: float,
+            d: int
+    ) -> np.ndarray:
+        w = np.insert(np.random.normal(scale=np.sqrt(h), size=(d, self.n_time)).cumsum(axis=1), 0, 0, axis=1)
+        return w
 
-        else:  # n_underlying > 2:
-            mat_cholesky = np.linalg.cholesky(rho)
-            for k in range(self.n_mc):
-                for i in range(1, self.n_time+1):
-                    correlated_paths[k*n_underlying:(k+1)*n_underlying, i] = np.dot(mat_cholesky, correlated_paths[k*n_underlying:(k+1)*n_underlying, i])
-            return correlated_paths
+    def generate_correlated_brownian(
+            self,
+            paths: np.ndarray,
+            sigma: np.ndarray,
+            rho: np.ndarray,
+            n_underlying: int
+    ) -> np.ndarray:
+
+        assert rho.shape == (n_underlying, n_underlying)
+
+        mat_cholesky = np.linalg.cholesky(rho)
+        sigma_mat = np.diag(sigma)
+        mat = np.dot(sigma_mat, mat_cholesky)
+
+        correlated_paths = np.zeros(paths.shape)
+        for k in range(self.n_mc):
+            for i in range(1, self.n_time + 1):
+                correlated_paths[k * n_underlying:(k + 1) * n_underlying, :] = np.dot(mat[:, np.newaxis], paths[k * n_underlying:(
+                                                                                                                                         k + 1) * n_underlying,
+                                                                                                          :]).reshape(
+                    (n_underlying, self.n_time + 1))
+
+        return correlated_paths
+
+    def compute_confidence_interval(self, computed_payoffs: np.ndarray[np.float64]) -> npt.NDArray[np.float64]:
+        assert len(computed_payoffs) == self.n_mc
+        var_payoffs = computed_payoffs.var()
+
+        confidence_interval = np.zeros(2, dtype=np.float64)
+        confidence_interval += computed_payoffs.mean()
+        confidence_interval[0] -= np.sqrt(var_payoffs / self.n_mc)
+        confidence_interval[1] += np.sqrt(var_payoffs / self.n_mc)
+
+        return confidence_interval
 
 
 class PricingAnalytic(PricingMethod):
@@ -113,7 +169,8 @@ class PricingBinomialTree(PricingMethod):
 
         match underlying_model:
             case UnderlyingModel.BlackScholes():
-                s = underlying_model.underlying_price
+                assert underlying_model.dic_param_model['n_underlying'] == 1
+                s = underlying_model.dic_param_model['underlying_price']
                 u, d = self.compute_up_down(derivative, underlying_model, self.tree_model)
                 generated_paths = np.zeros((self.n_time + 1, self.n_time + 1))
                 for j in range(self.n_time + 1):  ## time variable
@@ -124,9 +181,9 @@ class PricingBinomialTree(PricingMethod):
 
     def plot_generated_paths(self, derivative: Derivative.Derivative, model: UnderlyingModel.UnderlyingModel):
         generated_paths = self.generate_paths(derivative, model)
-        s = model.underlying_price
-        sigma = model.sigma
-        r = model.r
+        s = model.dic_param_model['underlying_price']
+        sigma = model.dic_param_model['sigma']
+        r = model.dic_param_model['r']
         end_time = derivative.dic_params_derivatives['end_time']
 
         fig, ax = plt.subplots(figsize=(12, 4))

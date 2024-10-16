@@ -3,9 +3,9 @@ from typing import Union, Any
 import numpy as np
 
 minimal_expected_black_scholes_dict_params = {
-    'r': Union[int,float, list, np.ndarray],
+    'r': Union[int, float, list, np.ndarray],
     'sigma': Union[int, float, list, np.ndarray],
-    'q': Union[int,float, list, np.ndarray],
+    'q': Union[int, float, list, np.ndarray],
     'underlying_price': Union[int, float, list, np.ndarray],
 }
 
@@ -25,13 +25,20 @@ full_expected_black_scholes_dict_params = {
 class UnderlyingModel(ABC):
 
     def __init__(self,
-                 dic_param_model: dict[str, Any]
+                 dic_param_model: dict[str, Any],
                  ) -> None:
+        self.name = None
         self.dic_param_model = dic_param_model
 
     @abstractmethod
     def check_dic_param(self, dic_param_model: dict[str, Any]):
         pass
+
+    def __str__(self):
+        to_print = f"{self.name} model\n"
+        for key, val in self.dic_param_model.items():
+            to_print += f"{key}: {val}\n"
+        return to_print
 
 
 class BlackScholes(UnderlyingModel):
@@ -39,9 +46,9 @@ class BlackScholes(UnderlyingModel):
     def __init__(self,
                  dic_param_model: dict[str, Any]
                  ) -> None:
-
         self.check_dic_param(dic_param_model)
         super().__init__(dic_param_model)
+        self.name = "Black Scholes"
 
     def check_dic_param(self, dic_param_model) -> None:
         # Iterate through minimal_expected_black_scholes_dict_params to validate each entry
@@ -107,15 +114,6 @@ class BlackScholes(UnderlyingModel):
                         f"Parameter 'rho' should be a square matrix of shape ({n_underlying}, {n_underlying})."
                     )
 
-    def __str__(self) -> str:
-        return (
-            f"""model_name : Black Scholes model\n"""
-            f"""r : {self.dic_param_model['r']}\n"""
-            f"""q : {self.dic_param_model['q']}\n"""
-            f"""sigma : {self.dic_param_model['sigma']}\n"""
-            f"""underlying_price : {self.dic_param_model['underlying_price']}\n"""
-        )
-
 
 class Bachelier(UnderlyingModel):
 
@@ -123,6 +121,7 @@ class Bachelier(UnderlyingModel):
                  dic_param_model: dict[str, Any]
                  ) -> None:
         super().__init__(dic_param_model)
+        self.name = "Bachelier"
 
     def check_dic_param(self, dic_param_model: dict[str, Any]):
         pass
