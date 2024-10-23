@@ -51,6 +51,7 @@ class PricingMonteCarlo(PricingMethod):
                 r: float = model.dic_param_model['r']  # float
                 q: np.ndarray = np.array(model.dic_param_model['q'])  # list of n_underlying elements
                 sigma: np.ndarray = model.dic_param_model['sigma']  # list of
+                rho: np.ndarray = model.dic_param_model['rho']
                 valuation_time: float = derivative.dic_params_derivatives['valuation_time']
                 end_time: float = derivative.dic_params_derivatives['end_time']
                 s: np.ndarray = np.array(model.dic_param_model['underlying_price'])
@@ -61,10 +62,11 @@ class PricingMonteCarlo(PricingMethod):
                 w = self.generate_brownian_paths(h, d)
                 st = np.zeros(w.shape)
                 if n_underlying > 1:
-                    w = self.generate_correlated_brownian(w, model.dic_param_model['rho'], model.dic_param_model['n_underlying'])
+                    w = self.generate_correlated_brownian(w, sigma, rho, n_underlying)
                     for k in range(self.n_mc):
-                        for j in range(self.n_time+1):
-                            st[k*n_underlying:(k+1)*n_underlying,j] = s*np.exp( ((r-q) - sigma**2)*t[j] + w[k*n_underlying:(k+1)*n_underlying,j] )
+                        for j in range(self.n_time + 1):
+                            st[k * n_underlying:(k + 1) * n_underlying, j] = s * np.exp(
+                                ((r - q) - sigma ** 2) * t[j] + w[k * n_underlying:(k + 1) * n_underlying, j])
                 else:
                     st = s * np.exp((r - q - 0.5 * (sigma ** 2)) * t + sigma * w)
 
