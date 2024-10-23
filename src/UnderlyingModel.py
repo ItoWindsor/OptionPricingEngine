@@ -4,7 +4,7 @@ import numpy as np
 
 minimal_expected_black_scholes_dict_params = {
     'r': Union[int, float, list, np.ndarray],
-    'sigma': Union[int, float, list, np.ndarray],
+    'sigma': Union[list, np.ndarray],
     'q': Union[int, float, list, np.ndarray],
     'underlying_price': Union[int, float, list, np.ndarray],
 }
