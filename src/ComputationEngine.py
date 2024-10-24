@@ -34,7 +34,8 @@ class ComputationEngine:
 
         param_computation : dict[str, Any]
             dictionary of parameters
-            The dictionary should be consistent with the computation method inserted as it will be used to initiate an instance of it
+            The dictionary should be consistent with the computation method inserted as it will be used to initiate an instance
+            of it
             e.g : if computation_method = 'finite_difference', the keys of the dictionary should be n_time, n_space
 
         Returns
